@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Travel Desk · LaserData</title>
+<style>
+  /* LaserData navy, with LaserData lime as the accent. Dark is the look;
+     light is opt-in, for slides and screenshots. */
+  :root {
+    --bg: #0a1020; --panel: #111a2e; --ink: #dfe7f5; --muted: #8796b3; --line: #22304d;
+    --good: #b8ff52; --bad: #ff5a6a; --warn: #ffb84d; --accent: #b8ff52; --on-accent: #0a1020;
+    --chip: #13213d; --btn: #1b2a47; --btn-line: #2d4270; --logo-fg: #ffffff; --logo-cut: #041520;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --ink: #1a2236; --muted: #5d6b86; --line: #d5dcea;
+    --good: #3f7d0a; --bad: #c92f40; --warn: #a86500; --accent: #b8ff52; --on-accent: #0a1020;
+    --chip: #eef2fa; --btn: #eef2fa; --btn-line: #bccbe6; --logo-fg: #1a2236; --logo-cut: #ffffff;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; }
+  h1 b { color: var(--accent); }
+  :root[data-theme="light"] h1 b { color: var(--good); }
+  h1 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  #logo { display: inline-flex; align-items: center; height: 26px; color: inherit; text-decoration: none; }
+  #logo svg { height: 100%; width: auto; }
+  #logo #D, #logo #laserdata { fill: var(--logo-fg) !important; stroke: var(--logo-fg) !important; }
+  #logo #L { fill: var(--logo-cut) !important; }
+  #logo .fallback { font: 600 17px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .divider { width: 1px; align-self: stretch; background: var(--line); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+  button, select, input { font: inherit; border: 1px solid var(--btn-line); background: var(--btn); color: var(--ink); padding: 6px 10px; border-radius: 8px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  button.on { background: var(--warn); border-color: var(--warn); color: var(--on-accent); }
+  button.yes { color: var(--good); }
+  button.no { color: var(--bad); }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 400px; min-height: 0; }
+  #left { overflow-y: auto; min-height: 0; padding: 12px 16px; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin-bottom: 8px; }
+  form label { color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+  form input[type=number] { width: 70px; }
+  .rules { color: var(--muted); font-size: 12px; margin: 0 2px 12px; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; min-height: 0; }
+  section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  .empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
+  .trip { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel); }
+  .trip.voting { border-color: var(--warn); }
+  .trip .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .trip .title { font-weight: 600; }
+  .trip .title small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .total { font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+  .badge.booked { background: var(--accent); color: var(--on-accent); }
+  .badge.voting, .badge.booking, .badge.quoting, .badge.policy { background: var(--warn); color: var(--on-accent); }
+  .badge.choosing { background: transparent; outline: 1px solid var(--accent); color: var(--ink); }
+  .trip.choosing { border-color: var(--accent); }
+  .badge.blocked, .badge.unwound, .badge.declined, .badge.failed { background: var(--bad); color: #fff; }
+  .quotes { display: grid; grid-template-columns: 56px 1fr; gap: 4px 8px; margin: 8px 0; font-size: 12px; align-items: center; }
+  .quotes .k { color: var(--muted); }
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .chip { padding: 1px 8px; border-radius: 999px; background: var(--chip); }
+  .chip.pick { outline: 1px solid var(--accent); }
+  :root[data-theme="light"] .chip.pick { outline-color: var(--good); }
+  .chip.missed { color: var(--muted); text-decoration: line-through; }
+  .verdict { font-size: 13px; margin: 6px 0; }
+  .verdict b.allow { color: var(--good); }
+  .verdict b.block { color: var(--bad); }
+  .verdict b.step_up { color: var(--warn); }
+  .vote { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 13px; margin: 6px 0; padding: 6px 8px; border-radius: 8px; background: var(--chip); }
+  .vote .who { display: inline-flex; gap: 4px; align-items: center; }
+  .vote .allow { color: var(--good); font-weight: 600; }
+  .vote .block { color: var(--bad); font-weight: 600; }
+  .steps { display: flex; gap: 4px; margin: 8px 0 4px; }
+  .step { flex: 1; text-align: center; font-size: 12px; padding: 3px 0; border-radius: 6px; background: var(--chip); color: var(--muted); }
+  .step.working { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--ink); animation: pulse 1s ease-in-out infinite; }
+  .step.done { background: var(--accent); color: var(--on-accent); }
+  .step.failed { background: var(--bad); color: #fff; }
+  .step.cancelled { background: transparent; outline: 1px dashed var(--bad); outline-offset: -1px; color: var(--bad); text-decoration: line-through; }
+  .step.skipped { opacity: .45; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  .note { font-size: 12px; color: var(--warn); margin-top: 2px; }
+  .refs { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .fault { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+  .fault span { color: var(--muted); font-size: 12px; }
+  .stat { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13px; margin-bottom: 6px; }
+  .stat span:nth-child(even) { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+  .fin { font-size: 12px; padding: 2px 0; border-bottom: 1px dashed var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  .audit { font-size: 12px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .audit .ok { color: var(--good); font-weight: 700; }
+  .audit .no { color: var(--bad); font-weight: 700; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  #feed { font-size: 12px; max-height: 360px; overflow-y: auto; }
+  .ev { display: grid; grid-template-columns: 34px 96px 1fr; gap: 6px; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+  .ev .trip-id, .ev .who { color: var(--muted); }
+  .ev.bad .what { color: var(--bad); }
+  .ev.good .what { color: var(--good); }
+  .ev.warn .what { color: var(--warn); }
+  .err { color: var(--bad); font-size: 12px; }
+  .pick { margin: 8px 0; font-size: 13px; }
+  .pick h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 8px 0 4px; font-weight: 600; }
+  .opt { display: grid; grid-template-columns: 18px 1fr auto; gap: 2px 8px; align-items: baseline; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+  .opt:hover { background: var(--chip); }
+  .opt input { margin: 0; }
+  .opt .price { font-family: ui-monospace, Menlo, monospace; text-align: right; }
+  .opt .why { grid-column: 2 / 4; color: var(--muted); font-size: 12px; }
+  .opt .cap { color: var(--bad); font-size: 12px; margin-left: 6px; }
+  .bookbar { display: flex; gap: 12px; align-items: center; justify-content: flex-end; margin-top: 8px; }
+  .chip small { color: var(--muted); }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a id="logo" href="https://laserdata.com" target="_blank" rel="noopener" aria-label="LaserData"><span class="fallback">laserdata</span></a>
+  <div class="divider"></div>
+  <h1><b>Travel</b> Desk <small>on Laser SDK for TypeScript</small></h1>
+  <div class="actions">
+    <button id="demo" title="Run every scenario in turn, unattended">Demo loop</button>
+    <button id="random" class="primary">Random trip</button>
+    <button id="theme" title="Light or dark">Light</button>
+  </div>
+</header>
+<main>
+  <div id="left">
+    <form id="request">
+      <label>Traveller <select id="traveller"></select></label>
+      <label>From <select id="from"></select></label>
+      <label>To <select id="city"></select></label>
+      <label>Depart <input id="depart" type="date"></label>
+      <label>Nights <input id="nights" type="number" min="1" max="14" value="3"></label>
+      <label>Cabin <select id="cabin"><option value="economy">Economy</option><option value="business">Business</option></select></label>
+      <label>Room <select id="room"><option value="any">Any</option></select></label>
+      <button class="primary" type="submit">Get quotes</button>
+    </form>
+    <div class="err" id="formerr"></div>
+    <div class="rules" id="rules"></div>
+    <div id="trips"><p class="empty">No trips yet. Get quotes for one, or press Random trip.</p></div>
+  </div>
+  <aside>
+    <section>
+      <h2>Faults</h2>
+      <div class="fault"><div>Slow car hire quote<br><span>Metro Car Rentals answers too late, so the trip goes ahead without a car</span></div><button class="small" data-fault="slowCarQuote">Off</button></div>
+      <div class="fault"><div>Car hire turns down the next booking<br><span>the hotel and flight already booked are cancelled</span></div><button class="small" data-fault="carRejects">Off</button></div>
+      <div class="fault"><div>Stall the next hotel clerk<br><span>after 30 seconds another clerk takes over the booking, and the first clerk can't take a second room when it wakes up</span></div><button class="small" data-fault="stallClerk">Off</button></div>
+    </section>
+    <section>
+      <h2>Finance reader</h2>
+      <div class="stat" id="finstat"></div>
+      <div id="finance"></div>
+    </section>
+    <section>
+      <h2>Auditor</h2>
+      <div class="row"><button class="small" data-audit="read">Read the ledger</button><button class="small" data-audit="tamper">Change a booking</button></div>
+      <div id="audit"></div>
+    </section>
+    <section>
+      <h2>Log</h2>
+      <div id="feed"></div>
+    </section>
+  </aside>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const money = (n) => "$" + Number(n).toLocaleString("en-AU");
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+  };
+  const post = (path, body) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+
+  function applyTheme() {
+    const light = store.get("travel.theme") === "light";
+    document.documentElement.dataset.theme = light ? "light" : "dark";
+    $("theme").textContent = light ? "Dark" : "Light";
+  }
+  applyTheme();
+
+  let options = null;
+  let hotelCap = 400;
+  function fillCities() {
+    const from = $("from").value;
+    const current = $("city").value;
+    const cities = options.cities.filter((c) => c.name !== from);
+    $("city").innerHTML = cities.map((c) => `<option value="${esc(c.name)}">${esc(c.name)}${c.international ? " (international)" : ""}</option>`).join("");
+    if (cities.some((c) => c.name === current)) $("city").value = current;
+  }
+  function fillOptions(o, policy) {
+    hotelCap = policy.hotelCap;
+    if (options) return;
+    options = o;
+    $("traveller").innerHTML = o.travellers.map((t) => `<option>${esc(t)}</option>`).join("");
+    $("from").innerHTML = o.origins.map((c) => `<option>${esc(c)}</option>`).join("");
+    fillCities();
+    $("room").innerHTML += o.rooms.map((r) => `<option value="${esc(r.type)}">${esc(r.label[0].toUpperCase() + r.label.slice(1))}</option>`).join("");
+    $("depart").min = o.today;
+    $("depart").value = o.depart;
+    $("rules").textContent = `Policy: trips over ${money(policy.approvalOver)} need manager and finance approval. No hotel over ${money(policy.hotelCap)} a night. Business class on international flights only. Prices move with the date: booking ahead is cheaper, peak seasons and Friday or Sunday flights cost more.`;
+  }
+
+  const day = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const why = (q) => q.reasons && q.reasons.length ? `<span class="why">${esc(q.reasons.join(" · "))}</span>` : "";
+
+  // What the traveller has picked on each card still choosing, so the picks
+  // survive the page redrawing every 700 ms.
+  const picks = {};
+  function pickFor(t) {
+    picks[t.id] ??= { ...t.suggested };
+    return picks[t.id];
+  }
+
+  function chooser(t) {
+    const pick = pickFor(t);
+    const want = t.request.room;
+    const rooms = t.quotes.rooms.filter((q) => want === "any" || q.room === want);
+    const flight = t.quotes.flights.find((q) => q.supplier === pick.flight);
+    const room = rooms.find((q) => q.supplier === pick.hotel && q.room === pick.room);
+    const total = (flight ? flight.price : 0) + (room ? room.price : 0) + (t.quotes.car ? t.quotes.car.price : 0);
+    const flightRows = t.quotes.flights.map((q) => `<label class="opt">
+        <input type="radio" name="f-${esc(t.id)}" data-pick="${esc(t.id)}|flight|${esc(q.supplier)}" ${q.supplier === pick.flight ? "checked" : ""}>
+        <span>${esc(q.name)} <small class="empty">${esc(q.detail)}</small></span><span class="price">${money(q.price)}</span>${why(q)}
+      </label>`).join("");
+    const roomRows = rooms.map((q) => `<label class="opt">
+        <input type="radio" name="h-${esc(t.id)}" data-pick="${esc(t.id)}|room|${esc(q.supplier)}|${esc(q.room)}" ${q.supplier === pick.hotel && q.room === pick.room ? "checked" : ""}>
+        <span>${esc(q.name)}, ${esc(q.detail)}${q.nightly > hotelCap ? `<span class="cap">over the ${money(hotelCap)} cap</span>` : ""} <small class="empty">${q.left} left</small></span><span class="price">${money(q.price)}</span>${why(q)}
+      </label>`).join("");
+    const car = t.quotes.car
+      ? `<div class="opt"><span></span><span>${esc(t.quotes.car.name)}, ${esc(t.quotes.car.detail)}</span><span class="price">${money(t.quotes.car.price)}</span>${why(t.quotes.car)}</div>`
+      : `<p class="empty">No car hire quote in time; the trip goes ahead without a car.</p>`;
+    const late = t.quotes.missed.length ? `<p class="empty">Too late for the panel: ${t.quotes.missed.map(esc).join(", ")}</p>` : "";
+    return `<div class="pick">
+      <h3>Flights</h3>${flightRows}
+      <h3>Rooms</h3>${roomRows || `<p class="empty">No rooms of that type quoted.</p>`}
+      <h3>Car</h3>${car}${late}
+      <div class="bookbar"><span class="total">${money(total)}</span><button class="primary small" data-book="${esc(t.id)}" ${flight && room ? "" : "disabled"}>Book this trip</button></div>
+    </div>`;
+  }
+
+  const STEPS = [["flight", "Flight"], ["hotel", "Hotel"], ["car", "Car"]];
+  const STATUS = { quoting: "getting quotes", choosing: "pick and book", policy: "checking policy", voting: "waiting for approval", blocked: "blocked by policy", unwound: "cancelled" };
+
+  function tripCard(t) {
+    const p = t.proposal;
+    const chip = (q, picked) => `<span class="chip ${picked ? "pick" : ""}">${esc(q.name)}${q.room ? ` <small>${esc(q.room)}</small>` : ""} ${money(q.price)}</span>`;
+    let quotes = `<p class="empty">Asking every supplier…</p>`;
+    if (t.status === "choosing") {
+      quotes = chooser(t);
+    } else if (t.status !== "quoting") {
+      const c = t.choice || {};
+      const car = t.quotes.car ? chip(t.quotes.car, p && p.car) : `<span class="chip missed">no quote in time</span>`;
+      const late = t.quotes.missed.length ? `<span class="k">Too late</span><span class="chips">${t.quotes.missed.map((name) => `<span class="chip missed">${esc(name)}</span>`).join("")}</span>` : "";
+      const picked = t.quotes.rooms.filter((q) => q.supplier === c.hotel && q.room === c.room);
+      quotes = `<div class="quotes">
+        <span class="k">Flights</span><span class="chips">${t.quotes.flights.map((q) => chip(q, p && p.flight.supplier === q.supplier)).join("")}</span>
+        <span class="k">Room</span><span class="chips">${picked.map((q) => chip(q, true)).join("") || `<span class="chip missed">none</span>`}</span>
+        <span class="k">Car</span><span class="chips">${car}</span>${late}
+      </div>`;
+    }
+    const VERDICTS = { allow: "allowed", block: "blocked", step_up: "needs approval" };
+    const verdict = t.verdict ? `<div class="verdict">Policy: <b class="${esc(t.verdict.kind)}">${esc(VERDICTS[t.verdict.kind] ?? t.verdict.kind)}</b> · ${esc(t.verdict.reason)}</div>` : "";
+    let vote = "";
+    if (t.vote) {
+      const voter = (name, label) => {
+        const v = t.vote[name];
+        if (v) return `<span class="who">${label} <span class="${esc(v)}">${v === "allow" ? "approved" : "declined"}</span></span>`;
+        if (t.vote.outcome) return `<span class="who">${label} <span class="empty">no vote</span></span>`;
+        return `<span class="who">${label} <button class="small yes" data-vote="${esc(t.id)}|${name}|1">Approve</button><button class="small no" data-vote="${esc(t.id)}|${name}|0">Decline</button></span>`;
+      };
+      const outcome = t.vote.outcome
+        ? `<b class="${t.vote.outcome === "committed" ? "allow" : "block"}">${t.vote.outcome === "committed" ? "approved" : "declined"}</b>`
+        : `<span class="empty">waiting for both to decide</span>`;
+      vote = `<div class="vote">${voter("manager", "Manager")}${voter("finance", "Finance")}${outcome}</div>`;
+    }
+    const steps = ["booking", "booked", "unwound"].includes(t.status)
+      ? `<div class="steps">${STEPS.filter(([k]) => k !== "car" || (p && p.car)).map(([k, label]) => `<div class="step ${esc(t.steps[k])}">${label}</div>`).join("")}</div>`
+      : "";
+    const refs = t.status === "booked" ? `<div class="refs">Booking references: ${Object.entries(t.refs).map(([k, v]) => `${k} ${esc(v)}`).join(" · ")}</div>` : "";
+    const note = t.note ? `<div class="note">${esc(t.note)}</div>` : "";
+    const r = t.request;
+    return `<div class="trip ${esc(t.status)}">
+      <div class="top">
+        <span class="title">${esc(t.id)} · ${esc(r.traveller)}, ${esc(r.from)} to ${esc(r.city)}<small>departs ${esc(day(r.depart))}, ${r.nights} nights, ${esc(r.cabin)}${r.room !== "any" ? ", " + esc(r.room) + " room" : ""}</small></span>
+        <span>${p ? `<span class="total">${money(p.total)}</span> ` : ""}<span class="badge ${esc(t.status)}">${esc(STATUS[t.status] ?? t.status)}</span></span>
+      </div>${quotes}${verdict}${vote}${steps}${refs}${note}
+    </div>`;
+  }
+
+  function render(s) {
+    fillOptions(s.options, s.policy);
+    $("demo").classList.toggle("on", s.demo);
+    $("demo").textContent = s.demo ? "Demo loop: on" : "Demo loop";
+    $("trips").innerHTML = s.trips.length ? s.trips.map(tripCard).join("") : `<p class="empty">No trips yet. Get quotes for one, or press Random trip.</p>`;
+    for (const b of document.querySelectorAll("[data-fault]")) {
+      const on = s.faults[b.dataset.fault];
+      b.classList.toggle("on", on);
+      b.textContent = on ? "On" : "Off";
+    }
+    const sent = s.finance.seen.length;
+    const held = s.ledger.records - sent;
+    const heldShare = s.ledger.bytes ? Math.round(100 * (1 - s.finance.bytes / s.ledger.bytes)) : 0;
+    $("finstat").innerHTML = `<span>Finished trips</span><span>${s.ledger.records}</span>
+      <span>Sent to finance to review</span><span>${sent}</span>
+      <span>Kept back by the server, never sent to finance</span><span>${held}${s.ledger.bytes ? ` (${heldShare}% of the data)` : ""}</span>`;
+    $("finance").innerHTML = (s.finance.error ? `<p class="err">${esc(s.finance.error)}</p>` : "") +
+      (s.finance.seen.length
+        ? s.finance.seen.slice(0, 8).map((r) => `<div class="fin"><span>${esc(r.trip)} ${esc(r.traveller)}, ${esc(STATUS[r.status] ?? r.status)}</span><span>${money(r.total)}</span></div>`).join("")
+        : `<p class="empty">Finance only reviews trips over ${money(s.policy.approvalOver)}, and trips that were declined or cancelled. The server sends it those and keeps the rest back.</p>`);
+    $("audit").innerHTML = (s.audit.error ? `<p class="err">${esc(s.audit.error)}</p>` : "") +
+      s.audit.results.map((r) => `<div class="audit"><span class="${r.allowed ? "ok" : "no"}">${r.allowed ? "✓" : "✕"}</span> ${esc(r.action)}: ${esc(r.detail)}</div>`).join("");
+    $("feed").innerHTML = s.events.map((e) => `<div class="ev ${esc(e.tone)}"><span class="trip-id">${esc(e.trip ?? "")}</span><span class="who">${esc(e.who)}</span><span class="what">${esc(e.text)}</span></div>`).join("");
+  }
+
+  async function tick() {
+    try { render(await (await fetch("/api/state")).json()); } catch {}
+    setTimeout(tick, 700);
+  }
+
+  $("from").addEventListener("change", fillCities);
+  $("request").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const res = await post("/api/trips", { traveller: $("traveller").value, from: $("from").value, city: $("city").value, depart: $("depart").value, nights: Number($("nights").value), cabin: $("cabin").value, room: $("room").value });
+    $("formerr").textContent = res.error ?? "";
+  });
+  document.addEventListener("change", (e) => {
+    const input = e.target.closest("[data-pick]");
+    if (!input) return;
+    const [trip, kind, supplier, room] = input.dataset.pick.split("|");
+    const pick = picks[trip];
+    if (!pick) return;
+    if (kind === "flight") pick.flight = supplier;
+    else { pick.hotel = supplier; pick.room = room; }
+  });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.id === "random") post("/api/trips", { random: true });
+    else if (b.id === "demo") post("/api/demo", { on: !b.classList.contains("on") });
+    else if (b.id === "theme") { store.set("travel.theme", store.get("travel.theme") === "light" ? "dark" : "light"); applyTheme(); }
+    else if (b.dataset.fault) post("/api/faults", { name: b.dataset.fault, value: !b.classList.contains("on") });
+    else if (b.dataset.audit) post("/api/audit", { action: b.dataset.audit });
+    else if (b.dataset.book) {
+      b.disabled = true;
+      post("/api/choose", { trip: b.dataset.book, ...picks[b.dataset.book] });
+    }
+    else if (b.dataset.vote) {
+      const [trip, voter, yes] = b.dataset.vote.split("|");
+      b.disabled = true;
+      post("/api/vote", { trip, voter, approve: yes === "1" });
+    }
+  });
+
+  fetch("/static/ld-logo.svg").then((r) => r.ok ? r.text() : "").then((svg) => {
+    if (svg.trim().startsWith("<svg")) $("logo").innerHTML = svg.replace(/<title>[\s\S]*?<\/title>/, "");
+  });
+  tick();
+</script>
+</body>
+</html>
