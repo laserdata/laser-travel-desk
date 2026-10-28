@@ -289,12 +289,13 @@
       : "";
     const refs = t.status === "booked" ? `<div class="refs">Booking references: ${Object.entries(t.refs).map(([k, v]) => `${k} ${esc(v)}`).join(" · ")}</div>` : "";
     const note = t.note ? `<div class="note">${esc(t.note)}</div>` : "";
+    const session = t.session ? `<div class="refs">Session ${esc(t.session)}</div>` : "";
     const r = t.request;
     return `<div class="trip ${esc(t.status)}">
       <div class="top">
         <span class="title">${esc(t.id)} · ${esc(r.traveller)}, ${esc(r.from)} to ${esc(r.city)}<small>departs ${esc(day(r.depart))}, ${r.nights} nights, ${esc(r.cabin)}${r.room !== "any" ? ", " + esc(r.room) + " room" : ""}</small></span>
         <span>${p ? `<span class="total">${money(p.total)}</span> ` : ""}<span class="badge ${esc(t.status)}">${esc(STATUS[t.status] ?? t.status)}</span></span>
-      </div>${quotes}${verdict}${vote}${steps}${refs}${note}
+      </div>${quotes}${verdict}${vote}${steps}${refs}${note}${session}
     </div>`;
   }
 
