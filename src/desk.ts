@@ -3,7 +3,8 @@
 // (cheapest is picked to start with). The desk proposes that trip through the
 // policy governor, holds a vote when the governor steps it up, and books it as
 // a saga: flight, hotel, car, each a workflow step with a compensation that
-// cancels it if a later step fails.
+// cancels it if a later step fails. Each trip is a session, opened when the
+// traveller's request comes in and ended when the trip is settled.
 
 import {
   AgentId,
@@ -12,6 +13,8 @@ import {
   GovernorMode,
   Laser,
   PolicyBlockedError,
+  Session,
+  SessionLease,
   StepUpRequiredError,
   TopicRetention,
   VoteChoice,
@@ -44,6 +47,7 @@ export const VOTES = "votes"
 export const LEDGER = "ledger"
 const FIXED_INBOX = { kind: "fixed" as const, topic: AgentTopic.Sessions }
 const RETENTION = TopicRetention.expireAfter(86_400_000)
+const SETTLED: readonly Trip["status"][] = ["booked", "unwound", "blocked", "declined", "failed"]
 
 export type StepState = "waiting" | "working" | "done" | "failed" | "cancelled" | "skipped"
 
@@ -85,7 +89,15 @@ export interface Trip {
   steps: { flight: StepState; hotel: StepState; car: StepState }
   refs: Record<string, string>
   run?: string
+  session?: string
   note?: string
+}
+
+interface OpenSession {
+  readonly session: Session
+  readonly lease: SessionLease
+  // Writes to one session go in order.
+  writes: Promise<void>
 }
 
 export interface LedgerRecord {
@@ -102,6 +114,7 @@ export interface LedgerRecord {
 export class Desk {
   readonly trips = new Map<string, Trip>()
   readonly ledger = { records: 0, bytes: 0 }
+  private readonly sessions = new Map<string, OpenSession>()
   private seq = 0
 
   private constructor(
@@ -135,10 +148,11 @@ export class Desk {
         // Nothing to delete on a first run.
       }
     }
-    await laser.bootstrap(1, RETENTION)
+    await laser.sessions().bootstrap(1, RETENTION)
   }
 
   async close(): Promise<void> {
+    for (const open of this.sessions.values()) open.lease.release()
     await this.booker.close()
   }
 
@@ -185,17 +199,71 @@ export class Desk {
   }
 
   private fail(trip: Trip, error: unknown): void {
-    trip.status = "failed"
     trip.note = errorText(error)
+    this.advance(trip, "failed")
     feed.add("desk", `trip failed: ${errorText(error)}`, "bad", trip.id)
   }
 
+  // The traveller's request is the session's first state: what they asked
+  // for, before any supplier is asked.
+  private async begin(trip: Trip): Promise<void> {
+    const r = trip.request
+    const { session, lease } = await this.laser
+      .sessions()
+      .start()
+      .agent(DESK)
+      .tag(`trip:${trip.id}`)
+      .tag(`traveller:${r.traveller}`)
+      .tag(`city:${r.city}`)
+      .begin()
+    trip.session = session.conversation.toString()
+    const open: OpenSession = { session, lease, writes: Promise.resolve() }
+    this.sessions.set(trip.id, open)
+    open.writes = session.state().set("intent", { op: "book-trip", ...r }).then(() => undefined)
+    await open.writes
+    feed.add("desk", `session ${trip.session} opened for this trip`, "info", trip.id)
+  }
+
+  // Move the trip on and record it on its session. The booking saga runs
+  // inside the session and ends it; a trip settled before the saga ends it
+  // here: completed when the desk reached a decision, failed when it could
+  // not finish.
+  private advance(trip: Trip, status: Trip["status"], detail: Record<string, unknown> = {}): void {
+    trip.status = status
+    const open = this.sessions.get(trip.id)
+    if (open === undefined) return
+    const state = open.session.state()
+    open.writes = open.writes
+      .then(async () => {
+        for (const [key, value] of Object.entries(detail)) await state.set(key, value)
+        await state.set("status", status)
+        if (!SETTLED.includes(status)) return
+        this.sessions.delete(trip.id)
+        if (trip.run !== trip.session) {
+          if (status === "failed") {
+            await open.session.fail({ code: { kind: "known", name: "ToolFailure" }, message: trip.note ?? status, retryable: false })
+          } else {
+            await open.session.end()
+          }
+        }
+        open.lease.release()
+      })
+      .catch((error: unknown) => {
+        feed.add("desk", `could not record the trip on its session: ${errorText(error)}`, "warn", trip.id)
+      })
+  }
+
   private async process(trip: Trip, auto: boolean): Promise<void> {
+    await this.begin(trip)
     await this.quote(trip)
     const suggested = this.suggest(trip)
     if (suggested === undefined) return
     trip.suggested = suggested
-    trip.status = "choosing"
+    const q = trip.quotes
+    this.advance(trip, "choosing", {
+      quotes: { flights: q.flights.length, rooms: q.rooms.length, car: q.car !== undefined, missed: q.missed },
+      suggested
+    })
     if (auto) await this.proceed(trip, suggested)
   }
 
@@ -216,7 +284,7 @@ export class Desk {
     }
     trip.choice = choice
     trip.proposal = proposal
-    trip.status = "policy"
+    this.advance(trip, "policy", { choice, proposal })
     await this.publishProposal(trip, { proposal })
   }
 
@@ -264,8 +332,8 @@ export class Desk {
     const flight = trip.quotes.flights[0]
     const room = trip.quotes.rooms.find((q) => want === "any" || q.room === want)
     if (flight === undefined || room?.room === undefined) {
-      trip.status = "failed"
       trip.note = flight === undefined ? "no flight quoted in time" : `no ${want === "any" ? "" : roomLabel(want) + " "}room quoted in time`
+      this.advance(trip, "failed")
       feed.add("desk", trip.note, "bad", trip.id)
       return undefined
     }
@@ -309,17 +377,18 @@ export class Desk {
     } catch (error) {
       const reason = this.policy.reasons.get(trip.id) ?? error
       if (error instanceof PolicyBlockedError) {
-        trip.status = "blocked"
         trip.verdict = { kind: "block", reason: String(reason) }
+        this.advance(trip, "blocked", { verdict: trip.verdict })
         feed.add("policy", `blocked: ${trip.verdict.reason}`, "bad", trip.id)
         await this.writeLedger(trip, "blocked", trip.verdict.reason)
         return
       }
       if (error instanceof StepUpRequiredError) {
-        const intent = this.approvals.open(ConversationId.derive(`trip/${trip.id}`), proposal)
-        trip.status = "voting"
+        const conversation = this.sessions.get(trip.id)?.session.conversation ?? ConversationId.derive(`trip/${trip.id}`)
+        const intent = this.approvals.open(conversation, proposal)
         trip.verdict = { kind: "step_up", reason: String(reason) }
         trip.vote = { intent: intent.intentId.toString() }
+        this.advance(trip, "voting", { verdict: trip.verdict, vote: trip.vote })
         feed.add("policy", `needs approval: ${trip.verdict.reason}; the manager and finance must both approve`, "warn", trip.id)
         await this.laser
           .stream(settings.stream)
@@ -332,6 +401,7 @@ export class Desk {
       throw error
     }
     trip.verdict = { kind: "allow", reason: this.policy.reasons.get(trip.id) ?? "within policy" }
+    this.advance(trip, "policy", { verdict: trip.verdict })
     feed.add("policy", `allowed: ${trip.verdict.reason}`, "good", trip.id)
     await this.book(trip, proposal)
   }
@@ -354,6 +424,7 @@ export class Desk {
     if (decision === undefined) return
     trip.vote.outcome = decision.outcome
     trip.vote.reason = decision.reason
+    this.advance(trip, trip.status, { vote: trip.vote })
     await this.laser
       .stream(settings.stream)
       .topic(VOTES)
@@ -364,7 +435,7 @@ export class Desk {
       feed.add("desk", "approved by the manager and finance; booking now", "good", trip.id)
       await this.publishProposal(trip, { proposal: trip.proposal, approvedIntent: trip.vote.intent })
     } else {
-      trip.status = "declined"
+      this.advance(trip, "declined")
       feed.add("desk", `declined by ${trip.vote.manager === VoteChoice.Block ? "the manager" : "finance"}; the trip is not booked`, "bad", trip.id)
       await this.writeLedger(trip, "declined", decision.reason)
     }
@@ -374,7 +445,7 @@ export class Desk {
   // of the steps before it, newest first. The hotel step holds a fenced lease
   // and is reassigned if it times out.
   private async book(trip: Trip, p: Proposal): Promise<void> {
-    trip.status = "booking"
+    this.advance(trip, "booking")
     const r = trip.request
     const leg = { trip: trip.id, from: r.from, to: r.city, depart: r.depart }
     const book = (kind: "flight" | "hotel" | "car", extra: Partial<BookRequest> = {}) =>
@@ -405,7 +476,7 @@ export class Desk {
       }
     const roomExtra = trip.choice === undefined ? {} : { room: trip.choice.room }
 
-    const run = ConversationId.derive(`trip-run/${trip.id}/${String(Date.now())}`)
+    const run = this.sessions.get(trip.id)?.session.conversation ?? ConversationId.derive(`trip-run/${trip.id}/${String(Date.now())}`)
     trip.run = run.toString()
     let workflow = this.laser
       .workflow("trip")
@@ -436,13 +507,13 @@ export class Desk {
         if (trip.steps[kind] === "working") trip.steps[kind] = "failed"
         if (trip.steps[kind] === "waiting") trip.steps[kind] = "skipped"
       }
-      trip.status = "unwound"
       trip.note ??= errorText(error)
+      this.advance(trip, "unwound", { steps: trip.steps, refs: trip.refs, note: trip.note })
       feed.add("desk", `could not finish: ${trip.note}. The bookings already made were cancelled`, "bad", trip.id)
       await this.writeLedger(trip, "unwound", trip.note)
       return
     }
-    trip.status = "booked"
+    this.advance(trip, "booked", { steps: trip.steps, refs: trip.refs })
     feed.add("desk", `${r.traveller} is booked, $${String(p.total)}`, "good", trip.id)
     await this.writeLedger(trip, "booked")
   }
