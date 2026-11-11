@@ -28,7 +28,7 @@ export class FinanceReader {
 
   async start(laser: Laser): Promise<void> {
     const group = laser.stream(settings.stream).topic(LEDGER).consumerGroup(`finance-${Date.now().toString(36)}`)
-    await group.create({ filter: FinanceReader.filter() })
+    await group.create({ filter: FinanceReader.filter(), filterName: "finance-trips" })
     this.reader = await group.reader().start({ kind: "first" }).build()
     void this.loop()
   }

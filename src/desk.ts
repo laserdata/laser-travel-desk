@@ -296,7 +296,7 @@ export class Desk {
     const request: QuoteRequest = { op: "quote", trip: trip.id, from: r.from, to: r.city, depart: r.depart, nights: r.nights, cabin: r.cabin }
     const panel = <T>(skill: string): Promise<T[]> =>
       this.laser
-        .scatter(DESK, capabilitySelector(skill, { kind: "any" }), jsonBytes(request), FIXED_INBOX, settings.quoteDeadlineMs)
+        .scatter(DESK, capabilitySelector(skill, { kind: "any" }), jsonBytes(request), FIXED_INBOX, { kind: "bestEffort" }, settings.quoteDeadlineMs)
         .then((bodies) => bodies.map((body) => parseJson<T>(body)))
     const car = this.laser
       .contract(routeToCapable("quote-car", { kind: "any" }))
@@ -458,7 +458,7 @@ export class Desk {
       ({ outputs }: StepContext): Uint8Array => {
         const output = outputs.get(kind)
         const booked = output === undefined ? undefined : parseJson<Booked>(output)
-        trip.steps[kind] = "cancelled"
+        if (booked?.ref !== undefined) trip.steps[kind] = "cancelled"
         const request: CancelRequest = { op: "cancel", ...leg, ref: booked?.ref ?? "", ...extra }
         return jsonBytes(request)
       }

@@ -4,7 +4,7 @@ A corporate travel desk run by agents on one log. Someone asks for a trip from a
 
 Nothing has a fixed price. Each supplier prices each quote from the date: booking months ahead is cheapest and prices climb as departure gets close, peak seasons (Christmas and January, Easter, school holidays, each international city's high season) cost more, Friday and Sunday flights cost more, city hotels are dearer on weeknights, and prices rise as seats sell and rooms fill. Each quote says why its price moved.
 
-Built on Laser SDK 0.8.2 for TypeScript, running on Laser Stack locally or LaserData Cloud. The airlines, hotels and car hire firm are made up.
+Built on Laser SDK 0.9.1 for TypeScript, running on Laser Stack locally or LaserData Cloud. The airlines, hotels and car hire firm are made up.
 
 ## What it shows
 
