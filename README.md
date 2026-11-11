@@ -4,12 +4,13 @@ A corporate travel desk run by agents on one log. Someone asks for a trip from a
 
 Nothing has a fixed price. Each supplier prices each quote from the date: booking months ahead is cheapest and prices climb as departure gets close, peak seasons (Christmas and January, Easter, school holidays, each international city's high season) cost more, Friday and Sunday flights cost more, city hotels are dearer on weeknights, and prices rise as seats sell and rooms fill. Each quote says why its price moved.
 
-Built on Laser SDK 0.8.2 for TypeScript, running on Laser Stack locally or LaserData Cloud. The airlines, hotels and car hire firm are made up.
+Built on Laser SDK 0.9.1 for TypeScript, running on Laser Stack locally or LaserData Cloud. The airlines, hotels and car hire firm are made up.
 
 ## What it shows
 
 | Laser SDK | In the demo |
 |---|---|
+| Sessions | Each trip is a session (`laser.sessions().start()`), opened when the request comes in. The request is the session's first state, and the desk records the quotes, the pick, the governor's verdict, the vote and the outcome on it (`session.state().set(...)`). The booking saga runs under the session's id, so the flight, hotel and car steps and their cancellations are child sessions of the trip. A blocked or declined trip ends its session there; a trip that reaches the saga ends with it. The trip card shows the session id |
 | Scatter | One quote request goes to every agent that serves `quote-flight`, and one to every agent that serves the destination's hotel skill, such as `quote-hotel/sydney` (`laser.scatter(...)`). The desk names a skill, never a supplier. Thrift Air is the cheapest airline but takes 1.5 to 4 seconds to answer, so it misses the 2.5 second deadline more often than not and the trip goes ahead without its fare |
 | Contracts with deadlines | Metro Car Rentals quotes on its own contract (`laser.contract(...).deadline(...)`). **Slow car hire quote** makes it miss: the contract comes back `timedOut` and the trip goes ahead without a car |
 | Action governor | The booker's connection carries a governor (`Laser.builder().governor(policy, "enforce")`). Every proposal it publishes is checked before it reaches the log: allowed, blocked (a room over $400 a night, business class on a domestic flight), or needing approval (a trip over $1,500, which the SDK calls a step-up). A block or a step-up comes back as `PolicyBlockedError` or `StepUpRequiredError`, and nothing is written |

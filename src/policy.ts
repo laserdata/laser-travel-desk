@@ -15,6 +15,7 @@ import {
   type ActionGovernor,
   type ConversationId,
   type GovernedAction,
+  type ObservedVote,
   type VoteChoice
 } from "@laserdata/laser-sdk"
 
@@ -54,7 +55,7 @@ export function proposalBytes(proposal: Proposal): Uint8Array {
 
 export class Approvals {
   private readonly intents = new Map<string, Intent>()
-  private readonly votes = new Map<string, Vote[]>()
+  private readonly votes = new Map<string, ObservedVote[]>()
   private readonly decisions = new Map<string, Decision>()
 
   open(conversation: ConversationId, proposal: Proposal): Intent {
@@ -66,7 +67,7 @@ export class Approvals {
       mandatoryVoters: [MANAGER, FINANCE],
       policy: { kind: "all" },
       policyVersion: policy.version,
-      deadlineMicros: BigInt(Date.now() + settings.voteWindowMs) * 1000n
+      deadlineAtMicros: BigInt(Date.now() + settings.voteWindowMs) * 1000n
     })
     intent.validate()
     this.intents.set(intent.intentId.toString(), intent)
@@ -82,16 +83,17 @@ export class Approvals {
     const intent = this.intents.get(id)
     if (intent === undefined) throw new Error(`no intent ${id}`)
     const vote = Vote.cast(intent, voter, choice)
+    const now = BigInt(Date.now()) * 1000n
     const ballots = this.votes.get(id) ?? []
-    ballots.push(vote)
+    ballots.push({ vote, observedAtMicros: now })
     this.votes.set(id, ballots)
-    const decision = decide(intent, ballots, BigInt(Date.now()) * 1000n)
+    const decision = decide(intent, ballots, now)
     if (decision !== undefined) this.decisions.set(id, decision)
     return decision === undefined ? { vote } : { vote, decision }
   }
 
   ballots(id: string): readonly Vote[] {
-    return this.votes.get(id) ?? []
+    return (this.votes.get(id) ?? []).map((ballot) => ballot.vote)
   }
 
   // True only when a committed decision authorises this intent and the intent
