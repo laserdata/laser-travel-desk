@@ -170,7 +170,14 @@ export class Suppliers {
       .capabilities(skills.map((skillId) => ({ skillId, health: HEALTHY })))
       .handler({
         async handle(message, ctx): Promise<void> {
-          await handle(messageJson<SupplierRequest>(message), ctx)
+          const request = messageJson<SupplierRequest>(message)
+          // The workflow also compensates a step that was turned down. With no
+          // booking ref nothing was booked, so there is nothing to undo.
+          if (request.op === "cancel" && request.ref === "") {
+            await ctx.respond(jsonBytes({ ok: true, supplier: id, ref: "" }))
+            return
+          }
+          await handle(request, ctx)
         }
       })
       .build()

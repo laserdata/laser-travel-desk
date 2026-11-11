@@ -64,7 +64,7 @@ export class Auditor {
   async read(): Promise<AuditResult> {
     return this.attempt("read the bookings ledger", async (laser) => {
       const page = await laser.kv(BOOKINGS).scan().fetch()
-      return `${String(page.entries.length)} bookings visible`
+      return `${String(page.items.length)} bookings visible`
     })
   }
 
